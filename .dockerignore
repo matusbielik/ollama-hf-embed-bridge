@@ -1,0 +1,30 @@
+# Ignore build artifacts
+czech-embeddings-api
+*.exe
+
+# Ignore Git
+.git
+.gitignore
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore development files
+.vscode
+.idea
+
+# Ignore logs
+*.log
+
+# Ignore Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# Ignore model cache (will be downloaded in container)
+.cache
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
