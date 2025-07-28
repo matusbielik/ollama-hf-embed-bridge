@@ -135,11 +135,15 @@ func (pool *WorkerPool) startWorker(id int) (*Worker, error) {
 		return nil, fmt.Errorf("failed to start python process: %w", err)
 	}
 
+	// Create scanner with larger buffer for big embedding responses
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 10MB max token size
+	
 	worker := &Worker{
 		id:     id,
 		cmd:    cmd,
 		stdin:  stdin,
-		stdout: bufio.NewScanner(stdout),
+		stdout: scanner,
 		stderr: stderr,
 		ready:  false,
 	}
@@ -157,6 +161,9 @@ func (pool *WorkerPool) startWorker(id int) (*Worker, error) {
 
 	worker.ready = true
 	log.Printf("Worker %d ready on device: %s", id, readyResponse.Device)
+
+	// Start stderr monitoring goroutine
+	go worker.monitorStderr()
 
 	return worker, nil
 }
@@ -224,6 +231,16 @@ func (worker *Worker) processRequest(req *WorkerRequest) *WorkerResponse {
 	}
 
 	return &response
+}
+
+func (worker *Worker) monitorStderr() {
+	scanner := bufio.NewScanner(worker.stderr)
+	for scanner.Scan() {
+		log.Printf("Worker %d stderr: %s", worker.id, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("Worker %d stderr monitoring error: %v", worker.id, err)
+	}
 }
 
 func (pool *WorkerPool) Shutdown() {

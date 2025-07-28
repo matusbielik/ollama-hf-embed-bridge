@@ -14,6 +14,10 @@ import logging
 from typing import List
 import traceback
 import signal
+import warnings
+
+# Suppress transformers deprecation warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 
 # Configure logging to stderr to avoid interfering with stdout communication
 logging.basicConfig(
@@ -82,9 +86,11 @@ class HuggingFaceEmbeddingGenerator:
                     # Normalize
                     normalized = torch.nn.functional.normalize(mean_pooled, p=2, dim=1)
                     
-                    # Convert to list
-                    embedding = normalized.cpu().numpy().flatten().tolist()
-                    embeddings.append(embedding)
+                    # Convert to list and ensure clean floats
+                    embedding = normalized.cpu().numpy().flatten()
+                    # Replace any NaN or inf values with 0.0
+                    embedding = np.nan_to_num(embedding, nan=0.0, posinf=0.0, neginf=0.0)
+                    embeddings.append(embedding.tolist())
             
             logger.info(f"Generated embeddings for {len(texts)} texts")
             return embeddings
@@ -156,7 +162,14 @@ def main():
                     "model": generator.model_name,
                     "device": str(generator.device)
                 }
-                print(json.dumps(response), flush=True)
+                
+                # Validate JSON before sending
+                try:
+                    response_json = json.dumps(response)
+                    print(response_json, flush=True)
+                except (TypeError, ValueError) as e:
+                    error_response = {"error": f"JSON serialization failed: {str(e)}"}
+                    print(json.dumps(error_response), flush=True)
                 
             except Exception as e:
                 # Handle per-request errors without crashing worker
