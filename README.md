@@ -7,6 +7,7 @@ Ollama-compatible API server for **any HuggingFace embedding model** with **loca
 ## Features
 
 - 🤗 **Any HuggingFace Model**: Use any embedding model from HuggingFace Hub
+- 🔀 **Multi-Model Support**: Load and switch between multiple models in a single container
 - ⚡ **Persistent Workers**: 100x+ performance improvement over process spawning
 - 🔌 **Ollama Compatible**: Drop-in replacement for Ollama **embedding endpoints only**
 - 🐳 **Production Ready**: Docker support with configurable models
@@ -22,6 +23,30 @@ Perfect for **embedding-focused applications**:
 - **ML Pipelines**: Embedding generation for downstream ML tasks
 
 **Not suitable for**: Text generation, chatbots, or conversational AI (use [Ollama](https://ollama.com) for that).
+
+## Multi-Model Support
+
+**🔀 Load and switch between multiple models seamlessly:**
+
+- **Build-time Configuration**: Specify multiple models with comma-separated `MODEL_NAME` 
+- **Memory Efficient**: All models loaded once at startup, no switching overhead
+- **Dynamic Selection**: Choose model per request via API parameter
+- **Ollama Compatible**: Works with existing Ollama clients
+- **Error Handling**: Clear error messages for invalid model requests
+
+### Example Multi-Model Usage
+
+```bash
+# Build with 3 different models
+docker build --build-arg MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2,intfloat/e5-small-v2,BAAI/bge-large-en-v1.5" -t ollama-multi .
+
+# All models available via /api/tags
+curl http://localhost:11434/api/tags
+
+# Switch between models per request
+curl http://localhost:11434/api/embed -d '{"model": "intfloat/e5-small-v2", "input": ["text"]}'
+curl http://localhost:11434/api/embed -d '{"model": "BAAI/bge-large-en-v1.5", "input": ["text"]}'
+```
 
 ## Why This Project?
 
@@ -86,10 +111,25 @@ docker run -p 11434:11434 ollama-hf-embed-bridge
 docker run -p 11434:11434 --gpus all ollama-hf-embed-bridge
 ```
 
+### Build with Multiple Models
+```bash
+# Multiple English models
+docker build --build-arg MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2,intfloat/e5-small-v2" -t ollama-hf-embed-bridge .
+
+# Mixed model types
+docker build --build-arg MODEL_NAME="sentence-transformers/all-mpnet-base-v2,Seznam/small-e-czech,intfloat/e5-large-v2" -t ollama-hf-embed-bridge .
+
+# Run with multiple models
+docker run -p 11434:11434 --gpus all ollama-hf-embed-bridge
+```
+
 ### Runtime Model Override
 ```bash
 # Override any model at runtime (downloads on first use)
 docker run -p 11434:11434 --gpus all -e MODEL_NAME="BAAI/bge-large-en-v1.5" ollama-hf-embed-bridge
+
+# Override with multiple models at runtime
+docker run -p 11434:11434 --gpus all -e MODEL_NAME="BAAI/bge-large-en-v1.5,sentence-transformers/all-mpnet-base-v2" ollama-hf-embed-bridge
 ```
 
 ### GPU Support Details
@@ -132,13 +172,13 @@ go build -o ollama-hf-bridge .
 ```bash
 # English example (default model)
 curl http://localhost:11434/api/embed -d '{
-  "model": "all-MiniLM-L6-v2",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
   "input": ["Hello world", "How are you?"]
 }'
 
 # Czech example
 curl http://localhost:11434/api/embed -d '{
-  "model": "small-e-czech",
+  "model": "Seznam/small-e-czech",
   "input": ["Dobrý den", "Jak se máte?"]
 }'
 
@@ -147,18 +187,36 @@ curl http://localhost:11434/api/embed -d '{
   "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
   "input": ["Hello", "Bonjour", "Hola", "Ahoj"]
 }'
+
+# Multi-model selection (choose specific model)
+curl http://localhost:11434/api/embed -d '{
+  "model": "intfloat/e5-small-v2",
+  "input": ["Switching between models", "Dynamic model selection"]
+}'
+
+# Without specifying model (uses first available model)
+curl http://localhost:11434/api/embed -d '{
+  "input": ["Uses default model"]
+}'
 ```
 
 ### POST /api/embeddings  
 ```bash
 curl http://localhost:11434/api/embeddings -d '{
-  "model": "all-MiniLM-L6-v2", 
+  "model": "sentence-transformers/all-MiniLM-L6-v2", 
   "prompt": "This is a test sentence"
+}'
+
+# With specific model selection
+curl http://localhost:11434/api/embeddings -d '{
+  "model": "intfloat/e5-small-v2", 
+  "prompt": "Different model, different embeddings"
 }'
 ```
 
 ### GET /api/tags
 ```bash
+# Lists all available models
 curl http://localhost:11434/api/tags
 ```
 
@@ -175,10 +233,14 @@ client = ollama.Client(host='http://localhost:11434')
 # Or custom port
 client = ollama.Client(host='http://localhost:8080')
 
-response = client.embeddings(model='all-MiniLM-L6-v2', prompt='Hello world!')
+response = client.embeddings(model='sentence-transformers/all-MiniLM-L6-v2', prompt='Hello world!')
 
 # Works with any model you've configured
-response = client.embeddings(model='small-e-czech', prompt='Ahoj světe!')
+response = client.embeddings(model='Seznam/small-e-czech', prompt='Ahoj světe!')
+
+# Switch between multiple loaded models
+response1 = client.embeddings(model='intfloat/e5-small-v2', prompt='First model')
+response2 = client.embeddings(model='sentence-transformers/all-mpnet-base-v2', prompt='Second model')
 ```
 
 ## Supported Models

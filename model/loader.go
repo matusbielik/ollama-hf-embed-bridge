@@ -11,10 +11,8 @@ import (
 	"strings"
 )
 
-const (
-	ModelRepo = "Seznam/small-e-czech"
-	ModelURL  = "https://huggingface.co/" + ModelRepo + "/resolve/main/"
-)
+// Model registry and available models
+var AvailableModels []string
 
 type ModelFiles struct {
 	ConfigPath     string
@@ -23,57 +21,40 @@ type ModelFiles struct {
 	VocabPath      string
 }
 
-func (m *ModelFiles) ModelsDir() string {
+func GetModelsDir() string {
 	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".cache", "czech-embeddings", ModelRepo)
+	return filepath.Join(homeDir, ".cache", "czech-embeddings")
 }
 
-func DownloadModel() (*ModelFiles, error) {
-	files := &ModelFiles{}
-	modelsDir := files.ModelsDir()
+// InitializeModels parses MODEL_NAME env var and initializes the available models registry
+func InitializeModels() error {
+	modelNames := os.Getenv("MODEL_NAME")
+	if modelNames == "" {
+		modelNames = "sentence-transformers/all-MiniLM-L6-v2"
+	}
 	
-	err := os.MkdirAll(modelsDir, 0755)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create models directory: %w", err)
-	}
-
-	requiredFiles := map[string]*string{
-		"config.json":         &files.ConfigPath,
-		"tokenizer.json":      &files.TokenizerPath,
-		"pytorch_model.bin":   &files.ModelPath,
-		"vocab.txt":           &files.VocabPath,
-	}
-
-	for filename, pathPtr := range requiredFiles {
-		*pathPtr = filepath.Join(modelsDir, filename)
-		
-		if fileExists(*pathPtr) {
-			log.Printf("Model file %s already exists, skipping download", filename)
-			continue
-		}
-		
-		log.Printf("Downloading %s...", filename)
-		err := downloadFile(ModelURL+filename, *pathPtr)
-		if err != nil {
-			log.Printf("Failed to download %s: %v", filename, err)
-			// Try alternative files for tokenizer
-			if strings.Contains(filename, "tokenizer") {
-				altFile := "tokenizer_config.json"
-				altPath := filepath.Join(modelsDir, altFile)
-				*pathPtr = altPath
-				if !fileExists(altPath) {
-					err = downloadFile(ModelURL+altFile, altPath)
-					if err != nil {
-						return nil, fmt.Errorf("failed to download %s or %s: %w", filename, altFile, err)
-					}
-				}
-			} else {
-				return nil, fmt.Errorf("failed to download required file %s: %w", filename, err)
-			}
+	// Parse comma-separated model names
+	for _, modelName := range strings.Split(modelNames, ",") {
+		modelName = strings.TrimSpace(modelName)
+		if modelName != "" {
+			AvailableModels = append(AvailableModels, modelName)
 		}
 	}
+	
+	log.Printf("Initialized model registry with %d models: %v", len(AvailableModels), AvailableModels)
+	return nil
+}
 
-	log.Printf("Model downloaded successfully to %s", modelsDir)
+// GetAvailableModels returns the list of available models
+func GetAvailableModels() []string {
+	return AvailableModels
+}
+
+// DownloadModel downloads a specific model (legacy function, kept for compatibility)
+func DownloadModel() (*ModelFiles, error) {
+	// This function is now primarily used for compatibility
+	// The actual model loading is handled by Python workers
+	files := &ModelFiles{}
 	return files, nil
 }
 
