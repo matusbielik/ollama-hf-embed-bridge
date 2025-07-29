@@ -34,20 +34,6 @@ Perfect for **embedding-focused applications**:
 - **Ollama Compatible**: Works with existing Ollama clients
 - **Error Handling**: Clear error messages for invalid model requests
 
-### Example Multi-Model Usage
-
-```bash
-# Build with 3 different models
-docker build --build-arg MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2,intfloat/e5-small-v2,BAAI/bge-large-en-v1.5" -t ollama-multi .
-
-# All models available via /api/tags
-curl http://localhost:11434/api/tags
-
-# Switch between models per request
-curl http://localhost:11434/api/embed -d '{"model": "intfloat/e5-small-v2", "input": ["text"]}'
-curl http://localhost:11434/api/embed -d '{"model": "BAAI/bge-large-en-v1.5", "input": ["text"]}'
-```
-
 ## Why This Project?
 
 **Fills the gap between Ollama and HuggingFace for embeddings:**
@@ -61,6 +47,21 @@ curl http://localhost:11434/api/embed -d '{"model": "BAAI/bge-large-en-v1.5", "i
 | **Production Performance** | ✅ | ✅ (Persistent workers) | ❌ (Process per request) |
 | **Text Generation** | ✅ | ❌ | ✅ |
 | **Specialized Embeddings** | Limited | ✅ (Any domain/language) | ✅ |
+
+## Example Multi-Model Usage
+(more examples further below)
+
+```bash
+# Build with 3 different models
+docker build --build-arg MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2,intfloat/e5-small-v2,BAAI/bge-large-en-v1.5" -t ollama-multi .
+
+# All models available via /api/tags
+curl http://localhost:11434/api/tags
+
+# Switch between models per request
+curl http://localhost:11434/api/embed -d '{"model": "intfloat/e5-small-v2", "input": ["text"]}'
+curl http://localhost:11434/api/embed -d '{"model": "BAAI/bge-large-en-v1.5", "input": ["text"]}'
+```
 
 ## Docker Usage (Recommended)
 
@@ -100,7 +101,7 @@ docker build --build-arg MODEL_NAME="intfloat/e5-large-v2" -t ollama-hf-embed-br
 # Multilingual models  
 docker build --build-arg MODEL_NAME="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" -t ollama-hf-embed-bridge .
 
-# Czech models (keeping the original use case!)
+# Czech models (our original use case)
 docker build --build-arg MODEL_NAME="Seznam/small-e-czech" -t ollama-hf-embed-bridge .
 docker build --build-arg MODEL_NAME="Seznam/simcse-small-e-czech" -t ollama-hf-embed-bridge .
 
