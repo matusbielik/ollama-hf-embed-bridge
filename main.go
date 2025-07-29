@@ -61,7 +61,13 @@ func main() {
 	flag.Parse()
 
 	log.Printf("Starting Ollama HuggingFace Bridge server...")
-	log.Printf("Downloading and loading model...")
+	log.Printf("Initializing models...")
+
+	// Initialize model registry
+	err := model.InitializeModels()
+	if err != nil {
+		log.Fatalf("Failed to initialize models: %v", err)
+	}
 
 	files, err := model.DownloadModel()
 	if err != nil {
@@ -144,15 +150,24 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	embeddings, err := s.embeddingModel.GenerateEmbeddings(texts)
+	embeddings, err := s.embeddingModel.GenerateEmbeddings(texts, req.Model)
 	if err != nil {
 		log.Printf("Error generating embeddings: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Use requested model or first available model as response model name
+	responseModel := req.Model
+	if responseModel == "" {
+		availableModels := s.embeddingModel.GetAvailableModels()
+		if len(availableModels) > 0 {
+			responseModel = availableModels[0]
+		}
+	}
+
 	response := EmbedResponse{
-		Model:      "small-e-czech",
+		Model:      responseModel,
 		Embeddings: embeddings,
 	}
 
@@ -173,15 +188,24 @@ func (s *Server) handleEmbeddingsAlt(w http.ResponseWriter, r *http.Request) {
 	}
 
 	texts := []string{req.Prompt}
-	embeddings, err := s.embeddingModel.GenerateEmbeddings(texts)
+	embeddings, err := s.embeddingModel.GenerateEmbeddings(texts, req.Model)
 	if err != nil {
 		log.Printf("Error generating embeddings: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Use requested model or first available model as response model name
+	responseModel := req.Model
+	if responseModel == "" {
+		availableModels := s.embeddingModel.GetAvailableModels()
+		if len(availableModels) > 0 {
+			responseModel = availableModels[0]
+		}
+	}
+
 	response := EmbedResponse{
-		Model:      "small-e-czech",
+		Model:      responseModel,
 		Embeddings: embeddings,
 	}
 
@@ -195,21 +219,28 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := TagsResponse{
-		Models: []ModelInfo{
-			{
-				Name:       "small-e-czech:latest",
-				Model:      "small-e-czech",
-				ModifiedAt: time.Now(),
-				Size:       67108864, // ~64MB
-				Details: Details{
-					Family:    "electra",
-					Families:  []string{"electra"},
-					Format:    "pytorch",
-					ParamSize: "15M",
-				},
+	availableModels := s.embeddingModel.GetAvailableModels()
+	modelInfos := make([]ModelInfo, 0, len(availableModels))
+	
+	for _, modelName := range availableModels {
+		// Create model info for each available model
+		modelInfo := ModelInfo{
+			Name:       modelName + ":latest",
+			Model:      modelName,
+			ModifiedAt: time.Now(),
+			Size:       67108864, // Estimated size
+			Details: Details{
+				Family:    "transformer",
+				Families:  []string{"transformer"},
+				Format:    "pytorch",
+				ParamSize: "unknown",
 			},
-		},
+		}
+		modelInfos = append(modelInfos, modelInfo)
+	}
+
+	response := TagsResponse{
+		Models: modelInfos,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

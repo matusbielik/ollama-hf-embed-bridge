@@ -45,8 +45,13 @@ RUN useradd -m -u 1001 appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Pre-download model to avoid first-run delay (optional - uncomment if desired)
-RUN python3 -c "from transformers import AutoTokenizer, AutoModel; AutoTokenizer.from_pretrained('${MODEL_NAME}'); AutoModel.from_pretrained('${MODEL_NAME}')"
+# Pre-download all specified models to avoid first-run delay
+RUN python3 -c "\
+import os; \
+from transformers import AutoTokenizer, AutoModel; \
+model_names = [name.strip() for name in os.environ.get('MODEL_NAME', 'sentence-transformers/all-MiniLM-L6-v2').split(',') if name.strip()]; \
+[AutoTokenizer.from_pretrained(model) and AutoModel.from_pretrained(model) for model in model_names]; \
+print(f'Pre-downloaded {len(model_names)} models: {model_names}')"
 
 # Expose port
 EXPOSE 11434

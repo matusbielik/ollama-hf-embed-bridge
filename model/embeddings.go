@@ -14,8 +14,8 @@ import (
 )
 
 type EmbeddingModel struct {
-	workerPool *WorkerPool
-	modelName  string
+	workerPool     *WorkerPool
+	availableModels []string
 }
 
 type WorkerPool struct {
@@ -39,6 +39,7 @@ type Worker struct {
 
 type WorkerRequest struct {
 	Texts        []string `json:"texts"`
+	Model        string   `json:"model,omitempty"`
 	Type         string   `json:"type,omitempty"`
 	ResponseChan chan *WorkerResponse `json:"-"` // Don't marshal this field
 }
@@ -46,6 +47,7 @@ type WorkerRequest struct {
 type WorkerResponse struct {
 	Embeddings [][]float32 `json:"embeddings"`
 	Model      string      `json:"model"`
+	Models     []string    `json:"models,omitempty"` // Available models from worker
 	Device     string      `json:"device"`
 	Status     string      `json:"status,omitempty"`
 	Error      string      `json:"error,omitempty"`
@@ -71,11 +73,11 @@ func LoadModel(files *ModelFiles) (*EmbeddingModel, error) {
 	}
 
 	model := &EmbeddingModel{
-		workerPool: workerPool,
-		modelName:  "Seznam/small-e-czech",
+		workerPool:      workerPool,
+		availableModels: GetAvailableModels(),
 	}
 
-	log.Printf("Initialized persistent worker pool with %d workers for model: %s", numWorkers, model.modelName)
+	log.Printf("Initialized persistent worker pool with %d workers for %d models: %v", numWorkers, len(model.availableModels), model.availableModels)
 	return model, nil
 }
 
@@ -160,7 +162,7 @@ func (pool *WorkerPool) startWorker(id int) (*Worker, error) {
 	}
 
 	worker.ready = true
-	log.Printf("Worker %d ready on device: %s", id, readyResponse.Device)
+	log.Printf("Worker %d ready on device: %s with models: %v", id, readyResponse.Device, readyResponse.Models)
 
 	// Start stderr monitoring goroutine
 	go worker.monitorStderr()
@@ -264,15 +266,30 @@ func (pool *WorkerPool) Shutdown() {
 	log.Printf("Worker pool shut down")
 }
 
-func (em *EmbeddingModel) GenerateEmbeddings(texts []string) ([][]float32, error) {
+func (em *EmbeddingModel) GenerateEmbeddings(texts []string, modelName string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return [][]float32{}, nil
+	}
+
+	// Validate model name if provided
+	if modelName != "" {
+		modelFound := false
+		for _, availableModel := range em.availableModels {
+			if availableModel == modelName {
+				modelFound = true
+				break
+			}
+		}
+		if !modelFound {
+			return nil, fmt.Errorf("model '%s' not available. Available models: %v", modelName, em.availableModels)
+		}
 	}
 
 	// Create request with response channel
 	responseChan := make(chan *WorkerResponse, 1)
 	request := &WorkerRequest{
 		Texts:        texts,
+		Model:        modelName,
 		ResponseChan: responseChan,
 	}
 
@@ -295,12 +312,16 @@ func (em *EmbeddingModel) GenerateEmbeddings(texts []string) ([][]float32, error
 			return nil, fmt.Errorf("unexpected response length: got %d, expected %d", len(response.Embeddings), len(texts))
 		}
 
-		log.Printf("Generated embeddings for %d texts using persistent worker on %s", len(texts), response.Device)
+		log.Printf("Generated embeddings for %d texts using model %s on %s", len(texts), response.Model, response.Device)
 		return response.Embeddings, nil
 
 	case <-time.After(30 * time.Second):
 		return nil, fmt.Errorf("worker response timeout")
 	}
+}
+
+func (em *EmbeddingModel) GetAvailableModels() []string {
+	return em.availableModels
 }
 
 func (em *EmbeddingModel) Shutdown() {
